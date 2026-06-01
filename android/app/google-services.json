@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "194928349759",
+    "project_id": "bharatam-f3cd7",
+    "storage_bucket": "bharatam-f3cd7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:194928349759:android:9a80deddfa58426253de8a",
+        "android_client_info": {
+          "package_name": "com.example.bharatam_lms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjg0FJjV6jxsH8l6azt82i1acTVFGgn04"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
