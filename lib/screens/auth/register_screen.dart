@@ -117,13 +117,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
 
       await unifiedDocRef.set(userData);
 
-      // Write to legacy collections for seamless backward compatibility
-      if (_isTrainer) {
-        await FirebaseFirestore.instance.collection('trainers').doc(userId).set(userData);
-        await FirebaseFirestore.instance.collection('bharatam_trainers').doc(userId).set(userData);
-      } else {
-        await FirebaseFirestore.instance.collection('learners').doc(userId).set(userData);
-      }
+      // Unified collection 'bharatam_users' handles both roles via 'role' field
 
       if (!mounted) return;
       

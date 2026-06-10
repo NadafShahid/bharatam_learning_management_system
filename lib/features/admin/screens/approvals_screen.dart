@@ -7,6 +7,7 @@ import '../../../../widgets/animations.dart';
 import '../../../../widgets/gradient_button.dart';
 import '../../../../widgets/status_badge.dart';
 import '../../../../services/course_service.dart';
+import 'admin_course_preview_screen.dart';
 
 class ApprovalsScreen extends StatefulWidget {
   const ApprovalsScreen({super.key});
@@ -62,9 +63,9 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   }
 
   Widget _buildApprovalQueue() {
-    return FutureBuilder<List<CourseApprovalItem>>(
+    return StreamBuilder<List<CourseApprovalItem>>(
       key: ValueKey('approval_queue_$_reloadToken'),
-      future: _courseService.getCourseApprovalQueue(),
+      stream: _courseService.getCourseApprovalQueueStream(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -270,6 +271,20 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
         reviewLabel: isNewCourse ? 'Course approval' : 'New content approval',
         onReject: () => _rejectCourse(course.id),
         onApprove: () => _approveCourse(course.id),
+        onTap: () async {
+          final result = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminCoursePreviewScreen(
+                course: course,
+                needsCourseApproval: isNewCourse,
+              ),
+            ),
+          );
+          if (result == true && mounted) {
+            setState(() => _reloadToken++);
+          }
+        },
       ),
     );
   }
@@ -319,6 +334,7 @@ class _ApprovalCard extends StatelessWidget {
   final String reviewLabel;
   final VoidCallback onReject;
   final VoidCallback onApprove;
+  final VoidCallback onTap;
 
   const _ApprovalCard({
     required this.icon,
@@ -331,13 +347,13 @@ class _ApprovalCard extends StatelessWidget {
     required this.reviewLabel,
     required this.onReject,
     required this.onApprove,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.lg),
-      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.xl),
@@ -345,115 +361,134 @@ class _ApprovalCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Icon(icon, size: 32, color: iconColor),
-              ),
-              const SizedBox(width: AppSpacing.lg),
-              Expanded(
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: AppTextStyles.titleMedium,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: AppTextStyles.labelSmall.copyWith(
-                        color: AppColors.textHint,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const StatusBadge(status: BadgeStatus.pending),
-                        _InfoPill(
-                          icon: Icons.category_rounded,
-                          label: category.isEmpty ? 'Uncategorized' : category,
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: iconColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                          ),
+                          child: Icon(icon, size: 32, color: iconColor),
+                        ),
+                        const SizedBox(width: AppSpacing.lg),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: AppTextStyles.titleMedium,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                subtitle,
+                                style: AppTextStyles.labelSmall.copyWith(
+                                  color: AppColors.textHint,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  const StatusBadge(status: BadgeStatus.pending),
+                                  _InfoPill(
+                                    icon: Icons.category_rounded,
+                                    label: category.isEmpty ? 'Uncategorized' : category,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        border: Border.all(color: AppColors.divider),
+                      ),
+                      child: Wrap(
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.sm,
+                        children: [
+                          _InfoPill(icon: Icons.fact_check_rounded, label: reviewLabel),
+                          if (pendingVideoCount > 0)
+                            _InfoPill(
+                              icon: Icons.videocam_rounded,
+                              label: '$pendingVideoCount video${pendingVideoCount == 1 ? '' : 's'}',
+                            ),
+                          if (pendingPdfCount > 0)
+                            _InfoPill(
+                              icon: Icons.picture_as_pdf_rounded,
+                              label: '$pendingPdfCount PDF${pendingPdfCount == 1 ? '' : 's'}',
+                            ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(color: AppColors.divider),
             ),
-            child: Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
               children: [
-                _InfoPill(icon: Icons.fact_check_rounded, label: reviewLabel),
-                if (pendingVideoCount > 0)
-                  _InfoPill(
-                    icon: Icons.videocam_rounded,
-                    label: '$pendingVideoCount video${pendingVideoCount == 1 ? '' : 's'}',
-                  ),
-                if (pendingPdfCount > 0)
-                  _InfoPill(
-                    icon: Icons.picture_as_pdf_rounded,
-                    label: '$pendingPdfCount PDF${pendingPdfCount == 1 ? '' : 's'}',
-                  ),
+                Divider(height: 1, color: AppColors.divider),
+                const SizedBox(height: AppSpacing.lg),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: onReject,
+                        style: TextButton.styleFrom(
+                          backgroundColor: AppColors.error.withValues(alpha: 0.1),
+                          foregroundColor: AppColors.error,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
+                          ),
+                        ),
+                        child: const Text(
+                          'Reject',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: GradientButton(
+                        text: 'Approve',
+                        height: 44,
+                        borderRadius: AppRadius.pill,
+                        gradient: const LinearGradient(
+                          colors: [AppColors.success, Color(0xFF059669)],
+                        ),
+                        onPressed: onApprove,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Divider(height: 1, color: AppColors.divider),
-          const SizedBox(height: AppSpacing.lg),
-          Row(
-            children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: onReject,
-                  style: TextButton.styleFrom(
-                    backgroundColor: AppColors.error.withValues(alpha: 0.1),
-                    foregroundColor: AppColors.error,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                  ),
-                  child: const Text(
-                    'Reject',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: GradientButton(
-                  text: 'Approve',
-                  height: 44,
-                  borderRadius: AppRadius.pill,
-                  gradient: const LinearGradient(
-                    colors: [AppColors.success, Color(0xFF059669)],
-                  ),
-                  onPressed: onApprove,
-                ),
-              ),
-            ],
           ),
         ],
       ),

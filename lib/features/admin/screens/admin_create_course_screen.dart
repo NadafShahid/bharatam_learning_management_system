@@ -13,6 +13,7 @@ import '../../../../services/course_service.dart';
 import '../../../../services/category_service.dart';
 import '../../../../services/user_service.dart';
 import '../../../../services/bunny_stream_service.dart';
+import '../../../../services/bunny_storage_service.dart';
 import '../../../../models/app_models.dart';
 
 /// Admin version of Create Course — auto-approved status.
@@ -98,10 +99,13 @@ class _AdminCreateCourseScreenState extends State<AdminCreateCourseScreen> {
       try {
         final file = File(image.path);
         final fileName = 'thumbnail_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final ref = FirebaseStorage.instance.ref().child('course_thumbnails/$fileName');
+        final bunnyStorage = BunnyStorageService();
+        final url = await bunnyStorage.uploadFile(
+          file: file,
+          path: 'bharatm_library/thumbnails/$fileName',
+        );
         
-        await ref.putFile(file);
-        final url = await ref.getDownloadURL();
+        if (url == null) throw Exception('Failed to upload thumbnail');
         
         setState(() {
           _thumbnailUrl = url;
@@ -128,10 +132,13 @@ class _AdminCreateCourseScreenState extends State<AdminCreateCourseScreen> {
       try {
         final file = File(image.path);
         final fileName = 'video_thumb_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final ref = FirebaseStorage.instance.ref().child('video_thumbnails/$fileName');
+        final bunnyStorage = BunnyStorageService();
+        final url = await bunnyStorage.uploadFile(
+          file: file,
+          path: 'bharatm_library/thumbnails/$fileName',
+        );
         
-        await ref.putFile(file);
-        final url = await ref.getDownloadURL();
+        if (url == null) throw Exception('Failed to upload video thumbnail');
         
         setState(() {
           item.thumbnailUrl = url;
@@ -335,22 +342,24 @@ class _AdminCreateCourseScreenState extends State<AdminCreateCourseScreen> {
               isFree: item.isFree,
             );
           } else {
-            // PDF from device to Firebase Storage
+            // PDF from device to Bunny Storage
             final fileName = '${DateTime.now().millisecondsSinceEpoch}_${item.originalName}';
-            final ref = FirebaseStorage.instance.ref().child('courses/$courseId/pdfs/$fileName');
-            
-            final uploadTask = ref.putFile(item.file!);
-            
-            uploadTask.snapshotEvents.listen((event) {
-              if (mounted) {
-                setState(() {
-                  item.progress = event.bytesTransferred / event.totalBytes;
-                });
-              }
-            });
+            final bunnyStorage = BunnyStorageService();
+            final url = await bunnyStorage.uploadFile(
+              file: item.file!,
+              path: 'bharatm_library/pdfs/$fileName',
+              onProgress: (progress) {
+                if (mounted) {
+                  setState(() {
+                    item.progress = progress;
+                  });
+                }
+              },
+            );
 
-            await uploadTask;
-            final url = await ref.getDownloadURL();
+            if (url == null) {
+              throw Exception('Failed to upload PDF');
+            }
             
             await _courseService.uploadCourseContent(
               courseId: courseId,

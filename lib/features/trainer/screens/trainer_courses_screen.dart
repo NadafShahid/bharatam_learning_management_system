@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/animations.dart';
 import '../../../../widgets/status_badge.dart';
+import '../../../../widgets/bunny_storage_image.dart';
 import '../../../../services/course_service.dart';
 import '../../../../services/user_service.dart';
 import '../../../../models/app_models.dart';
@@ -234,7 +235,7 @@ class _TrainerCoursesScreenState extends State<TrainerCoursesScreen> {
                                       borderRadius: BorderRadius.circular(AppRadius.md),
                                       image: c.thumbnailUrl.isNotEmpty
                                           ? DecorationImage(
-                                              image: NetworkImage(c.thumbnailUrl),
+                                              image: bunnyStorageNetworkImage(c.thumbnailUrl),
                                               fit: BoxFit.cover,
                                             )
                                           : null,

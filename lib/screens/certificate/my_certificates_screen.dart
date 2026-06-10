@@ -24,7 +24,8 @@ class _MyCertificatesScreenState extends State<MyCertificatesScreen> {
   final _userService = UserService();
   final _learningService = StudentLearningService();
 
-  List<CourseModel> _purchasedCompleted = [];
+  List<CourseModel> _purchasedCoursesList = [];
+  Map<String, bool> _completionStatus = {};
   bool _isLoading = true;
   UserModel? _currentUser;
 
@@ -42,7 +43,7 @@ class _MyCertificatesScreenState extends State<MyCertificatesScreen> {
         final user = await _userService.getUserByPhone(phone);
         if (mounted) {
           setState(() => _currentUser = user);
-          await _fetchCompletedCourses();
+          await _fetchPurchasedCourses();
         }
       } else {
         if (mounted) setState(() => _isLoading = false);
@@ -53,7 +54,7 @@ class _MyCertificatesScreenState extends State<MyCertificatesScreen> {
     }
   }
 
-  Future<void> _fetchCompletedCourses() async {
+  Future<void> _fetchPurchasedCourses() async {
     if (_currentUser == null) {
       if (mounted) setState(() => _isLoading = false);
       return;
@@ -63,13 +64,19 @@ class _MyCertificatesScreenState extends State<MyCertificatesScreen> {
     }
     try {
       final purchases = await _userService.getUserPurchases(_currentUser!.id);
-      final allCourses = await _courseService.getCourses();
-
-      // Filter unique purchased courses
       final purchasedIds = purchases.map((p) => p.courseId).toSet();
-      final purchasedCourses = allCourses.where((c) => purchasedIds.contains(c.id)).toList();
 
-      final completed = <CourseModel>[];
+      final purchasedCourses = <CourseModel>[];
+      for (final id in purchasedIds) {
+        final fullCourse = await _courseService.getCourseById(id);
+        if (fullCourse != null) {
+          purchasedCourses.add(fullCourse);
+        }
+      }
+
+      final completionStatus = <String, bool>{};
+
+      final completedCourses = <CourseModel>[];
 
       for (final course in purchasedCourses) {
         await _learningService.reloadCourse(course.id);
@@ -91,19 +98,20 @@ class _MyCertificatesScreenState extends State<MyCertificatesScreen> {
           purchase: purchase,
           limitedTimeDays: course.limitedTimeDays,
         );
-        if (isCompleted) {
-          completed.add(course);
-        }
+        
+        completedCourses.add(course);
+        completionStatus[course.id] = isCompleted;
       }
 
       if (mounted) {
         setState(() {
-          _purchasedCompleted = completed;
+          _purchasedCoursesList = completedCourses;
+          _completionStatus = completionStatus;
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint('Error fetching completed courses: $e');
+      debugPrint('Error fetching purchased courses: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -126,16 +134,16 @@ class _MyCertificatesScreenState extends State<MyCertificatesScreen> {
         ),
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _fetchCompletedCourses,
-          color: AppColors.primary,
-          backgroundColor: AppColors.surface,
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _purchasedCompleted.isEmpty
-                  ? _buildEmptyState()
-                  : _buildCertificatesList(),
-        ),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: _fetchPurchasedCourses,
+                color: AppColors.primary,
+                backgroundColor: AppColors.surface,
+                child: _purchasedCoursesList.isEmpty
+                    ? _buildEmptyState()
+                    : _buildCertificatesList(),
+              ),
       ),
     );
   }
@@ -168,7 +176,7 @@ class _MyCertificatesScreenState extends State<MyCertificatesScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xxl),
                   Text(
-                    'No Certificates Earned Yet',
+                    'No Purchased Courses Yet',
                     style: AppTextStyles.headlineSmall.copyWith(
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
@@ -177,7 +185,7 @@ class _MyCertificatesScreenState extends State<MyCertificatesScreen> {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Complete 100% of the lectures in any of your purchased courses to unlock your verified, downloadable certificate!',
+                    'Purchase a course and complete 100% of the lectures to unlock your verified, downloadable certificate!',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: AppColors.textSecondary,
@@ -195,162 +203,64 @@ class _MyCertificatesScreenState extends State<MyCertificatesScreen> {
   Widget _buildCertificatesList() {
     return ListView.builder(
       physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      itemCount: _purchasedCompleted.length,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      itemCount: _purchasedCoursesList.length,
       itemBuilder: (context, index) {
-        final course = _purchasedCompleted[index];
+        final course = _purchasedCoursesList[index];
         final compDate = _learningService.courseCompletionDate(course.id) ?? DateTime.now();
-        final formattedDate = DateFormat('dd MMMM yyyy').format(compDate);
-        final color = index % 2 == 0 ? const Color(0xFFE8F0FE) : const Color(0xFFFFF3E0);
+        final formattedDate = DateFormat('MMMM dd, yyyy').format(compDate);
+        final userName = _currentUser?.name ?? 'Student';
+        final certificateId = 'BT-${DateFormat('yyyyMMdd').format(compDate)}-${userName.hashCode.abs().toString().padLeft(6, '0').substring(0, 6)}';
 
         return FadeSlideIn(
           delay: Duration(milliseconds: 100 + index * 100),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 18),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppRadius.xl),
-              boxShadow: AppShadows.card,
-              border: Border.all(
-                color: const Color(0xFFFFD480).withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      // Emoji backdrop
-                      Container(
-                        width: 54,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 32),
+            child: Column(
+              children: [
+                // The actual certificate in portrait mode
+                BharatamCertificateTemplate(
+                  courseName: course.title,
+                  userName: userName,
+                  completionDate: formattedDate,
+                  certificateId: certificateId,
+                  isPortrait: true,
+                ),
+                const SizedBox(height: 16),
+                // Button to view full landscape version or download
+                GradientButton(
+                  text: 'View Full Certificate',
+                  height: 48,
+                  borderRadius: AppRadius.pill,
+                  gradient: AppGradients.gold,
+                  icon: Icons.fullscreen_rounded,
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (_, _, _) => CertificateScreen(
+                          courseName: course.title,
+                          userName: userName,
+                          completedAt: compDate,
                         ),
-                        child: Center(
-                          child: Text(
-                            course.emoji.isNotEmpty ? course.emoji : '📚',
-                            style: const TextStyle(fontSize: 28),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // Details
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: AppColors.success.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(AppRadius.xs),
+                        transitionsBuilder: (_, animation, _, child) {
+                          return FadeTransition(
+                            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                            child: ScaleTransition(
+                              scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+                                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.verified_rounded, size: 10, color: AppColors.success),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Verified Certificate',
-                                    style: AppTextStyles.labelSmall.copyWith(
-                                      color: AppColors.success,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 9,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              course.title,
-                              style: AppTextStyles.titleLarge.copyWith(
-                                color: AppColors.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Instructor: ${course.trainerName}',
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Divider(),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Earned On',
-                            style: AppTextStyles.labelSmall.copyWith(fontSize: 9),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            formattedDate,
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                      GradientButton(
-                        text: 'View & Download',
-                        height: 38,
-                        borderRadius: AppRadius.pill,
-                        gradient: AppGradients.gold,
-                        icon: Icons.workspace_premium_rounded,
-                        onPressed: () {
-                          HapticFeedback.lightImpact();
-                          Navigator.push(
-                            context,
-                            PageRouteBuilder(
-                              pageBuilder: (_, _, _) => CertificateScreen(
-                                courseName: course.title,
-                                userName: _currentUser?.name ?? 'Student',
-                                completedAt: compDate,
-                              ),
-                              transitionsBuilder: (_, animation, _, child) {
-                                return FadeTransition(
-                                  opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
-                                  child: ScaleTransition(
-                                    scale: Tween<double>(begin: 0.95, end: 1.0).animate(
-                                      CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                                    ),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              transitionDuration: const Duration(milliseconds: 450),
+                              child: child,
                             ),
                           );
                         },
+                        transitionDuration: const Duration(milliseconds: 450),
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         );

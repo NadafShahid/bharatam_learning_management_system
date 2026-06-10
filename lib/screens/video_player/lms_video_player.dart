@@ -35,7 +35,7 @@ class LmsVideoPlayer extends StatefulWidget {
 }
 
 class _LmsVideoPlayerState extends State<LmsVideoPlayer> with WidgetsBindingObserver {
-  BetterPlayerController? _betterPlayerController;
+  BetterPlayerController _betterPlayerController;
   bool _isPlayerInitialized = false;
   bool _hasTriggeredCompletion = false;
 

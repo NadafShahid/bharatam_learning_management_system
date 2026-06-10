@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 class BunnyStreamService {
-  final String libraryId = "663705";
-  final String accessKey = "f3dc0bc3-e5af-4fdd-b3d773731bde-585d-4bff";
-  final String pullZoneUrl = "vz-c90ab4ce-005.b-cdn.net";
+  final String libraryId = "676379";
+  final String accessKey = "e7fe790c-05ab-4cc7-8aa0fe8cefb6-b71c-4c12";
+  final String pullZoneUrl = "vz-5549fe19-18c.b-cdn.net";
 
   /// Uploads a video file to Bunny Stream.
   /// Returns a Map with 'bunnyVideoId' and 'storageUrl' if successful, null otherwise.
@@ -22,7 +22,9 @@ class BunnyStreamService {
       createRequest.headers.set('Content-Type', 'application/json');
       createRequest.headers.set('accept', 'application/json');
       
-      createRequest.add(utf8.encode(jsonEncode({'title': title})));
+      final payload = utf8.encode(jsonEncode({'title': title}));
+      createRequest.contentLength = payload.length;
+      createRequest.add(payload);
       final createResponse = await createRequest.close();
       
       if (createResponse.statusCode != 200) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/animations.dart';
+import '../../../../widgets/bunny_storage_image.dart';
 import '../../../../services/trainer_service.dart';
 import '../../../../services/course_service.dart';
 import '../../../../services/user_service.dart';
@@ -336,8 +337,8 @@ class _TrainerDashboardScreenState extends State<TrainerDashboardScreen> {
         height: 48,
         color: AppColors.primary.withValues(alpha: 0.1),
         child: hasUrl
-            ? Image.network(
-                course.thumbnailUrl,
+            ? BunnyStorageImage(
+                imageUrl: course.thumbnailUrl,
                 width: 48,
                 height: 48,
                 fit: BoxFit.cover,

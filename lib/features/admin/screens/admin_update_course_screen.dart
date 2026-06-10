@@ -1,12 +1,12 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../models/app_models.dart';
 import '../../../../services/course_service.dart';
+import '../../../../services/bunny_storage_service.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/animations.dart';
 import '../../../../widgets/gradient_button.dart';
@@ -502,11 +502,12 @@ class _AdminAddPdfScreenState extends State<_AdminAddPdfScreen> {
     try {
       final fileName =
           '${DateTime.now().millisecondsSinceEpoch}_${_selectedPdfFile!.path.split('/').last.split('\\').last}';
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('courses/${widget.course.id}/pdfs/$fileName');
-      await ref.putFile(_selectedPdfFile!);
-      final url = await ref.getDownloadURL();
+      final bunnyStorage = BunnyStorageService();
+      final url = await bunnyStorage.uploadFile(
+        file: _selectedPdfFile!,
+        path: 'bharatm_library/pdfs/$fileName',
+      );
+      if (url == null) throw Exception('Failed to upload PDF');
 
       await _courseService.uploadCourseContent(
         courseId: widget.course.id,

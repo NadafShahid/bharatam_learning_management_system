@@ -5,6 +5,7 @@ import '../../widgets/course_card.dart';
 import '../../widgets/course_grid_card.dart';
 import '../../widgets/animations.dart';
 import '../../widgets/instructor_avatar.dart';
+import '../../widgets/bunny_storage_image.dart';
 import '../../models/app_models.dart';
 import '../../services/course_service.dart';
 import '../../services/subscription_service.dart';
@@ -151,8 +152,8 @@ class _TrainerProfileScreenState extends State<TrainerProfileScreen> {
                     child: Center(
                       child: widget.instructor.imageUrl.isNotEmpty
                           ? ClipOval(
-                              child: Image.network(
-                                widget.instructor.imageUrl,
+                              child: BunnyStorageImage(
+                                imageUrl: widget.instructor.imageUrl,
                                 width: 100,
                                 height: 100,
                                 fit: BoxFit.cover,

@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/gradient_button.dart';
 import '../../../../widgets/animations.dart';
+import '../../../../widgets/bunny_storage_image.dart';
 import '../../../../services/course_service.dart';
 import '../../../../services/category_service.dart';
 import '../../../../services/user_service.dart';
 import '../../../../services/bunny_stream_service.dart';
+import '../../../../services/bunny_storage_service.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../../../models/app_models.dart';
 
@@ -92,10 +94,13 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
       try {
         final file = File(image.path);
         final fileName = 'thumbnail_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final ref = FirebaseStorage.instance.ref().child('course_thumbnails/$fileName');
+        final bunnyStorage = BunnyStorageService();
+        final url = await bunnyStorage.uploadFile(
+          file: file,
+          path: 'bharatm_library/thumbnails/$fileName',
+        );
         
-        await ref.putFile(file);
-        final url = await ref.getDownloadURL();
+        if (url == null) throw Exception('Failed to upload thumbnail');
         
         setState(() {
           _thumbnailUrl = url;
@@ -122,10 +127,13 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
       try {
         final file = File(image.path);
         final fileName = 'video_thumb_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final ref = FirebaseStorage.instance.ref().child('video_thumbnails/$fileName');
+        final bunnyStorage = BunnyStorageService();
+        final url = await bunnyStorage.uploadFile(
+          file: file,
+          path: 'bharatm_library/thumbnails/$fileName',
+        );
         
-        await ref.putFile(file);
-        final url = await ref.getDownloadURL();
+        if (url == null) throw Exception('Failed to upload video thumbnail');
         
         setState(() {
           item.thumbnailUrl = url;
@@ -229,7 +237,7 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
                     border: Border.all(color: AppColors.primary, width: 1.5, style: BorderStyle.solid),
                     image: _thumbnailUrl.isNotEmpty
                         ? DecorationImage(
-                            image: NetworkImage(_thumbnailUrl),
+                            image: bunnyStorageNetworkImage(_thumbnailUrl),
                             fit: BoxFit.cover,
                           )
                         : null,
@@ -448,8 +456,8 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
                                       else if (item.thumbnailUrl.isNotEmpty) ...[
                                         ClipRRect(
                                           borderRadius: BorderRadius.circular(AppRadius.xs),
-                                          child: Image.network(
-                                            item.thumbnailUrl,
+                                          child: BunnyStorageImage(
+                                            imageUrl: item.thumbnailUrl,
                                             width: 48,
                                             height: 36,
                                             fit: BoxFit.cover,
@@ -668,95 +676,107 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
         );
       }
 
-      // Upload newly added files
+      // Upload newly added files — each file is handled independently so that
+      // a single failed upload does not roll back the course creation in Firestore.
+      int failedUploads = 0;
       for (final item in _courseFiles) {
-        if (item.videoUrl != null) {
-          // Video URL input by the user, saved directly without Firebase storage upload
-          await _courseService.uploadCourseContent(
-            courseId: courseId,
-            title: item.nameController.text.trim().isEmpty ? item.originalName.split('.').first : item.nameController.text.trim(),
-            contentType: item.type,
-            storageUrl: item.videoUrl!,
-            fileName: item.originalName,
-            bunnyVideoId: item.videoUrl!, // Using URL as ID for now
-            autoApprove: false, // Always pending for newly created courses
-            thumbnailUrl: item.thumbnailUrl,
-            isFree: item.isFree,
-          );
-        } else if (item.file != null) {
-          setState(() => item.isUploading = true);
-          if (item.type == CourseContentType.video) {
-            // Upload to Bunny Stream
-            final bunnyService = BunnyStreamService();
-            final bunnyResult = await bunnyService.uploadVideo(
-              file: item.file!,
-              title: item.nameController.text.trim().isEmpty ? item.originalName.split('.').first : item.nameController.text.trim(),
-              onProgress: (progress) {
-                if (mounted) {
-                  setState(() {
-                    item.progress = progress;
-                  });
-                }
-              },
-            );
-
-            if (bunnyResult == null) {
-              throw Exception('Failed to upload video to Bunny Stream');
-            }
-
+        try {
+          if (item.videoUrl != null) {
+            // Video URL entered by the user — save directly without uploading.
             await _courseService.uploadCourseContent(
               courseId: courseId,
               title: item.nameController.text.trim().isEmpty ? item.originalName.split('.').first : item.nameController.text.trim(),
               contentType: item.type,
-              storageUrl: bunnyResult['storageUrl']!,
+              storageUrl: item.videoUrl!,
               fileName: item.originalName,
-              bunnyVideoId: bunnyResult['bunnyVideoId']!,
-              autoApprove: false, // Always pending for newly created courses
+              bunnyVideoId: item.videoUrl!,
+              autoApprove: false,
               thumbnailUrl: item.thumbnailUrl,
               isFree: item.isFree,
             );
-          } else {
-            // PDF/File from device to Firebase Storage
-            final fileName = '${DateTime.now().millisecondsSinceEpoch}_${item.originalName}';
-            final ref = FirebaseStorage.instance.ref().child('courses/$courseId/pdfs/$fileName');
-            
-            final uploadTask = ref.putFile(item.file!);
-            
-            // Listen to progress updates
-            uploadTask.snapshotEvents.listen((event) {
-              if (mounted) {
-                setState(() {
-                  item.progress = event.bytesTransferred / event.totalBytes;
-                });
+          } else if (item.file != null) {
+            if (mounted) setState(() => item.isUploading = true);
+            if (item.type == CourseContentType.video) {
+              // Upload to Bunny Stream
+              final bunnyService = BunnyStreamService();
+              final bunnyResult = await bunnyService.uploadVideo(
+                file: item.file!,
+                title: item.nameController.text.trim().isEmpty ? item.originalName.split('.').first : item.nameController.text.trim(),
+                onProgress: (progress) {
+                  if (mounted) setState(() => item.progress = progress);
+                },
+              );
+
+              if (bunnyResult == null) {
+                throw Exception('Bunny Stream returned null for ${item.originalName}');
               }
-            });
 
-            await uploadTask;
-            final url = await ref.getDownloadURL();
-            
-            await _courseService.uploadCourseContent(
-              courseId: courseId,
-              title: item.nameController.text.trim().isEmpty ? item.originalName.split('.').first : item.nameController.text.trim(),
-              contentType: item.type,
-              storageUrl: url,
-              fileName: item.originalName,
-              bunnyVideoId: '',
-              autoApprove: false, // Always pending for newly created courses
-              thumbnailUrl: item.thumbnailUrl,
-              isFree: item.isFree,
-            );
+              await _courseService.uploadCourseContent(
+                courseId: courseId,
+                title: item.nameController.text.trim().isEmpty ? item.originalName.split('.').first : item.nameController.text.trim(),
+                contentType: item.type,
+                storageUrl: bunnyResult['storageUrl']!,
+                fileName: item.originalName,
+                bunnyVideoId: bunnyResult['bunnyVideoId']!,
+                autoApprove: false,
+                thumbnailUrl: item.thumbnailUrl,
+                isFree: item.isFree,
+              );
+            } else {
+              // PDF — upload to Bunny Storage
+              final fileName = '${DateTime.now().millisecondsSinceEpoch}_${item.originalName}';
+              final bunnyStorage = BunnyStorageService();
+              final url = await bunnyStorage.uploadFile(
+                file: item.file!,
+                path: 'bharatm_library/pdfs/$fileName',
+                onProgress: (progress) {
+                  if (mounted) setState(() => item.progress = progress);
+                },
+              );
+
+              if (url == null) {
+                throw Exception('Bunny Storage returned null for ${item.originalName}');
+              }
+
+              await _courseService.uploadCourseContent(
+                courseId: courseId,
+                title: item.nameController.text.trim().isEmpty ? item.originalName.split('.').first : item.nameController.text.trim(),
+                contentType: item.type,
+                storageUrl: url,
+                fileName: item.originalName,
+                bunnyVideoId: '',
+                autoApprove: false,
+                thumbnailUrl: item.thumbnailUrl,
+                isFree: item.isFree,
+              );
+            }
+            if (mounted) setState(() => item.isUploading = false);
           }
-          setState(() => item.isUploading = false);
+        } catch (uploadError) {
+          failedUploads++;
+          if (mounted) setState(() => item.isUploading = false);
+          print('File upload error for ${item.originalName}: $uploadError');
         }
       }
 
       if (!mounted) return;
-      Navigator.pop(context, true);
-      _showMessage(isDraft
-          ? 'Course draft and content saved.'
-          : 'Course and content submitted for admin approval.');
+
+      if (failedUploads > 0) {
+        // Course was saved in Firestore but some files failed to upload.
+        Navigator.pop(context, true);
+        _showMessage(
+          'Course saved, but $failedUploads file(s) failed to upload. '
+          'Please re-open the course and retry the failed uploads.',
+          isError: true,
+        );
+      } else {
+        Navigator.pop(context, true);
+        _showMessage(isDraft
+            ? 'Course draft and content saved.'
+            : 'Course and content submitted for admin approval.');
+      }
     } catch (e) {
-      if (mounted) _showMessage('Unable to save course. Please try again.', isError: true);
+      if (mounted) _showMessage('Unable to save course: ${e.toString()}', isError: true);
     } finally {
       if (mounted) {
         setState(() {

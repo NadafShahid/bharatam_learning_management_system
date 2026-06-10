@@ -10,6 +10,7 @@ import '../../../../widgets/animations.dart';
 import '../../../../models/app_models.dart';
 import '../../../../services/course_service.dart';
 import '../../../../services/bunny_stream_service.dart';
+import '../../../../services/bunny_storage_service.dart';
 
 /// Admin upload screen. Files stay in external storage; Firestore stores metadata only.
 class AdminVideoUploadScreen extends StatefulWidget {
@@ -525,9 +526,13 @@ class _AdminVideoUploadScreenState extends State<AdminVideoUploadScreen> {
 
     try {
       if (_isPdf && _selectedPdfFile != null) {
-        final ref = FirebaseStorage.instance.ref().child('courses/${course.id}/pdfs/${DateTime.now().millisecondsSinceEpoch}_${_selectedPdfFile!.path.split('/').last.split('\\').last}');
-        await ref.putFile(_selectedPdfFile!);
-        finalStorageUrl = await ref.getDownloadURL();
+        final bunnyStorage = BunnyStorageService();
+        final url = await bunnyStorage.uploadFile(
+          file: _selectedPdfFile!,
+          path: 'bharatm_library/pdfs/${DateTime.now().millisecondsSinceEpoch}_${_selectedPdfFile!.path.split('/').last.split('\\').last}',
+        );
+        if (url == null) throw Exception('Failed to upload PDF');
+        finalStorageUrl = url;
       } else if (!_isPdf && _selectedVideoFile != null) {
         final bunnyService = BunnyStreamService();
         final bunnyResult = await bunnyService.uploadVideo(

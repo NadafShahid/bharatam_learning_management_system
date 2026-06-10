@@ -4,7 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import '../../../../services/bunny_storage_service.dart';
+import '../../../../widgets/bunny_storage_image.dart';
 import '../../../../theme/app_theme.dart';
 import '../../../../widgets/gradient_button.dart';
 import '../../../../widgets/animations.dart';
@@ -165,13 +166,12 @@ class _TrainerProfileScreenState extends State<TrainerProfileScreen> {
     HapticFeedback.mediumImpact();
     
     try {
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('profile_photos')
-          .child('${_currentUser!.id}.jpg');
-          
-      await storageRef.putFile(file);
-      final downloadUrl = await storageRef.getDownloadURL();
+      final bunnyStorage = BunnyStorageService();
+      final downloadUrl = await bunnyStorage.uploadFile(
+        file: file,
+        path: 'bharatm_library/profile_photos/${_currentUser!.id}.jpg',
+      );
+      if (downloadUrl == null) throw Exception('Failed to upload profile photo');
       
       final updatedUser = UserModel(
         id: _currentUser!.id,
@@ -249,8 +249,8 @@ class _TrainerProfileScreenState extends State<TrainerProfileScreen> {
                             decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
                             child: ClipOval(
                               child: _currentUser?.profileImageUrl != null && _currentUser!.profileImageUrl.isNotEmpty
-                                  ? Image.network(
-                                      _currentUser!.profileImageUrl,
+                                  ? BunnyStorageImage(
+                                      imageUrl: _currentUser!.profileImageUrl,
                                       fit: BoxFit.cover,
                                       errorBuilder: (context, error, stackTrace) => const Center(child: Text('👨‍🏫', style: TextStyle(fontSize: 44))),
                                     )

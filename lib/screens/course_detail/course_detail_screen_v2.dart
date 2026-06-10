@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../models/app_models.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/animations.dart';
 import '../../widgets/purchase_sheets.dart';
 import '../../widgets/commerce_widgets.dart';
+import '../../widgets/bunny_storage_image.dart';
+import '../../services/bunny_storage_helper.dart';
 import '../video_player/video_player_screen.dart';
 import '../../services/subscription_service.dart';
 import '../../services/student_learning_service.dart';
@@ -13,6 +16,7 @@ import '../../services/user_service.dart';
 import '../../services/course_service.dart';
 import '../../services/bunny_stream_service.dart';
 import '../../services/course_service.dart';
+import 'pdf_viewer_screen.dart';
 
 /// Enhanced Course Detail Screen with modules, multi-level purchase, and access control.
 class CourseDetailScreenV2 extends StatefulWidget {
@@ -457,16 +461,16 @@ class _CourseDetailScreenV2State extends State<CourseDetailScreenV2>
                     widget.heroTag != null
                         ? Hero(
                             tag: widget.heroTag!,
-                            child: Image.network(
-                              _course.thumbnailUrl,
+                            child: BunnyStorageImage(
+                              imageUrl: _course.thumbnailUrl,
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) => Container(
                                 color: AppColors.textPrimary,
                               ),
                             ),
                           )
-                        : Image.network(
-                            _course.thumbnailUrl,
+                        : BunnyStorageImage(
+                            imageUrl: _course.thumbnailUrl,
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => Container(
                               color: AppColors.textPrimary,
@@ -697,6 +701,57 @@ class _CourseDetailScreenV2State extends State<CourseDetailScreenV2>
       directUrl = content.bunnyVideoId;
     } else if (content.storageUrl.isNotEmpty) {
       directUrl = content.storageUrl;
+    }
+
+    // Debug: log raw URL to help diagnose CDN issues
+    debugPrint('[BunnyDebug] Raw URL from Firebase: $directUrl');
+
+    if (content.contentType == CourseContentType.pdf) {
+      if (directUrl != null && directUrl.isNotEmpty) {
+        // Fix broken bhartamproject.b-cdn.net URL → storage.bunnycdn.com
+        final String fixedPdfUrl = BunnyStorageHelper.fixUrl(directUrl);
+        final Map<String, String> pdfHeaders =
+            BunnyStorageHelper.isStorageUrl(directUrl)
+                ? BunnyStorageHelper.storageHeaders
+                : const {};
+
+        debugPrint('[BunnyDebug] Fixed PDF URL: $fixedPdfUrl');
+
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PdfViewerScreen(
+              title: content.title,
+              pdfUrl: fixedPdfUrl,
+              headers: pdfHeaders,
+            ),
+          ),
+        );
+
+        PurchaseRecord? coursePurchase;
+        try {
+          coursePurchase = _accessControl.purchases.firstWhere(
+            (p) => p.courseId == _course.id && p.purchaseType == PurchaseType.course,
+          );
+        } catch (_) {}
+
+        await _learningService.completeVideo(
+          courseId: _course.id,
+          videoId: content.id,
+          totalVideos: _course.totalVideos,
+          purchase: coursePurchase,
+          limitedTimeDays: _course.limitedTimeDays,
+        );
+        
+        if (mounted) setState(() {});
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('PDF URL not found.')),
+          );
+        }
+      }
+      return;
     }
 
     await Navigator.push(
@@ -955,7 +1010,7 @@ class _CourseContentRowState extends State<CourseContentRow> {
   /// • PDFs & locked items: shows a plain icon, same as before.
   Widget _buildLeadingWidget() {
     final isPdf = widget.video.contentType == CourseContentType.pdf;
-    final hasThumbnail = widget.video.thumbnailUrl.isNotEmpty && !isPdf;
+    final hasThumbnail = widget.video.resolvedThumbnailUrl.isNotEmpty && !isPdf;
 
     // Plain icon fallback (also used as the overlay icon)
     final IconData iconData = !widget.canPlay
@@ -987,8 +1042,8 @@ class _CourseContentRowState extends State<CourseContentRow> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.network(
-              widget.video.thumbnailUrl,
+            BunnyStorageImage(
+              imageUrl: widget.video.resolvedThumbnailUrl,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Container(
                 color: AppColors.primary.withValues(alpha: 0.1),
@@ -1011,42 +1066,6 @@ class _CourseContentRowState extends State<CourseContentRow> {
   }
 
   Widget _buildDownloadControl() {
-    if (_isDownloading) {
-      return SizedBox(
-        width: 32,
-        height: 32,
-        child: CircularProgressIndicator(
-          value: _progress,
-          strokeWidth: 3,
-          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-          backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-        ),
-      );
-    }
-
-    if (widget.isDownloaded) {
-      return Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: AppColors.success.withValues(alpha: 0.1),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.check_circle_rounded,
-          color: AppColors.success,
-          size: 20,
-        ),
-      );
-    }
-
-    return IconButton(
-      icon: const Icon(Icons.file_download_outlined),
-      color: AppColors.primary,
-      iconSize: 22,
-      onPressed: _simulateDownload,
-      constraints: const BoxConstraints(),
-      padding: EdgeInsets.zero,
-    );
+    return const SizedBox.shrink();
   }
 }

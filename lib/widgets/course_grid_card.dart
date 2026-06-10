@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
+import 'bunny_storage_image.dart';
 
 class CourseGridCard extends StatefulWidget {
   final String title;
@@ -68,8 +69,8 @@ class _CourseGridCardState extends State<CourseGridCard>
         width: double.infinity,
         height: thumbnailHeight,
         child: widget.thumbnailUrl != null && widget.thumbnailUrl!.isNotEmpty
-            ? Image.network(
-                widget.thumbnailUrl!,
+            ? BunnyStorageImage(
+                imageUrl: widget.thumbnailUrl!,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: thumbnailHeight,

@@ -58,8 +58,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (_, _, _) => const LoginScreen(),
-        transitionsBuilder: (_, animation, _, child) {
+        settings: const RouteSettings(name: '/login'),
+        pageBuilder: (_, __, ___) => const LoginScreen(),
+        transitionsBuilder: (_, animation, __, child) {
           return FadeTransition(
             opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
             child: SlideTransition(

@@ -94,8 +94,9 @@ class _SplashScreenState extends State<SplashScreen>
       
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, _, _) => nextScreen,
-          transitionsBuilder: (_, animation, _, child) {
+          settings: const RouteSettings(name: '/home'),
+          pageBuilder: (_, __, ___) => nextScreen,
+          transitionsBuilder: (_, animation, __, child) {
             return FadeTransition(opacity: animation, child: child);
           },
           transitionDuration: const Duration(milliseconds: 600),
@@ -250,8 +251,9 @@ class _SplashScreenState extends State<SplashScreen>
 
                               Navigator.of(context).pushReplacement(
                                 PageRouteBuilder(
-                                  pageBuilder: (_, _, _) => nextScreen,
-                                  transitionsBuilder: (_, animation, _, child) {
+                                  settings: const RouteSettings(name: '/home'),
+                                  pageBuilder: (_, __, ___) => nextScreen,
+                                  transitionsBuilder: (_, animation, __, child) {
                                     return FadeTransition(opacity: animation, child: child);
                                   },
                                   transitionDuration: const Duration(milliseconds: 600),

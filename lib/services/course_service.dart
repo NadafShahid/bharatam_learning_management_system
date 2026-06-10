@@ -8,19 +8,37 @@ class CourseService {
   static final Map<String, String> _trainerNamesCache = {};
 
   bool _isApprovedCourseData(Map<String, dynamic> data) {
-    final status = data['approvalStatus']?.toString().toLowerCase();
-    if (status == 'approved') return true;
-    if (status == 'pending' || status == 'rejected' || status == 'draft') {
+    // 1. Check explicit approvalStatus
+    final approvalStatus = data['approvalStatus']?.toString().toLowerCase();
+    if (approvalStatus == 'approved') return true;
+    if (approvalStatus == 'pending' || approvalStatus == 'rejected' || approvalStatus == 'draft') {
       return false;
     }
-    if (data['isApproved'] is bool) return data['isApproved'] as bool;
-    return data['isApproved']?.toString().toLowerCase() == 'true';
+
+    // 2. Check explicit isApproved boolean or string
+    if (data['isApproved'] is bool) {
+      if (data['isApproved'] as bool == true) return true;
+      if (data['isApproved'] as bool == false) return false;
+    } else if (data['isApproved'] != null) {
+      final isAppStr = data['isApproved'].toString().toLowerCase();
+      if (isAppStr == 'true' || isAppStr == '1' || isAppStr == 'yes') return true;
+      if (isAppStr == 'false' || isAppStr == '0' || isAppStr == 'no') return false;
+    }
+
+    // 3. Check 'status' field (commonly used by web panels)
+    final status = data['status']?.toString().toLowerCase();
+    if (status == 'active' || status == 'published' || status == 'approved' || status == 'publish' || status == '1') return true;
+    if (status == 'inactive' || status == 'deleted' || status == 'draft' || status == 'pending' || status == '0') return false;
+
+    // 4. Fallback: If a course lacks all these fields, it was likely created 
+    // directly from an admin panel. We treat it as approved.
+    return true;
   }
 
   bool _needsCourseApproval(Map<String, dynamic> data) {
-    final status = data['approvalStatus']?.toString().toLowerCase();
-    if (status == 'pending') return true;
-    if (status == 'draft' || status == 'rejected') return false;
+    final approvalStatus = data['approvalStatus']?.toString().toLowerCase();
+    if (approvalStatus == 'pending') return true;
+    if (approvalStatus == 'draft' || approvalStatus == 'rejected') return false;
     return !_isApprovedCourseData(data);
   }
 
@@ -30,7 +48,6 @@ class CourseService {
   Stream<List<CourseModel>> getCourseListStream() {
     return _db
         .collection('bharatam_courses')
-        .where('isApproved', isEqualTo: true)
         .snapshots()
         .asyncMap((snapshot) => _mapCoursesLightweight(snapshot.docs));
   }
@@ -40,7 +57,6 @@ class CourseService {
   Future<List<CourseModel>> getCourseList() async {
     final snapshot = await _db
         .collection('bharatam_courses')
-        .where('isApproved', isEqualTo: true)
         .get();
     return _mapCoursesLightweight(snapshot.docs);
   }
@@ -116,6 +132,9 @@ class CourseService {
         }
 
         final isApprovedVal = _isApprovedCourseData(data);
+        
+        // Filter out unapproved courses
+        if (!isApprovedVal) continue;
 
         DateTime? createdAtVal;
         if (data['createdAt'] is Timestamp) {
@@ -193,7 +212,12 @@ class CourseService {
         .collection('bharatam_courses')
         .where('trainerId', isEqualTo: trainerId)
         .get();
-    return _mapCourses(querySnapshot.docs);
+
+    // Return ALL courses owned by this trainer — including pending, draft, and
+    // rejected — so they appear in the trainer's "My Courses" list regardless
+    // of their approval status.  Only the student-facing screens should filter
+    // by approval status.
+    return _mapCourses(querySnapshot.docs, onlyApprovedContent: false);
   }
 
   Future<List<CourseModel>> getAllCoursesForAdmin() async {
@@ -213,7 +237,13 @@ class CourseService {
   }
 
   Future<List<CourseApprovalItem>> getCourseApprovalQueue() async {
-    final querySnapshot = await _db.collection('bharatam_courses').get();
+    final querySnapshot = await _db
+        .collection('bharatam_courses')
+        .where(Filter.or(
+          Filter('isApproved', isEqualTo: false),
+          Filter('hasPendingContent', isEqualTo: true),
+        ))
+        .get();
     final courses = await _mapCourses(querySnapshot.docs);
     final coursesById = {for (final course in courses) course.id: course};
     final items = <CourseApprovalItem>[];
@@ -253,6 +283,57 @@ class CourseService {
       return a.course.category.compareTo(b.course.category);
     });
     return items;
+  }
+
+  Stream<List<CourseApprovalItem>> getCourseApprovalQueueStream() {
+    return _db
+        .collection('bharatam_courses')
+        .where(Filter.or(
+          Filter('isApproved', isEqualTo: false),
+          Filter('hasPendingContent', isEqualTo: true),
+        ))
+        .snapshots()
+        .asyncMap((snapshot) async {
+      final courses = await _mapCourses(snapshot.docs);
+      final coursesById = {for (final course in courses) course.id: course};
+      final items = <CourseApprovalItem>[];
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final course = coursesById[doc.id];
+        if (course == null) continue;
+
+        final pendingVideosSnapshot = await doc.reference
+            .collection('videos')
+            .where('approvalStatus', isEqualTo: 'pending')
+            .get();
+        final pendingPdfsSnapshot = await doc.reference
+            .collection('pdfs')
+            .where('approvalStatus', isEqualTo: 'pending')
+            .get();
+
+        final needsCourseApproval = _needsCourseApproval(data);
+        final pendingVideoCount = pendingVideosSnapshot.size;
+        final pendingPdfCount = pendingPdfsSnapshot.size;
+
+        if (needsCourseApproval || pendingVideoCount > 0 || pendingPdfCount > 0) {
+          items.add(CourseApprovalItem(
+            course: course,
+            needsCourseApproval: needsCourseApproval,
+            pendingVideoCount: pendingVideoCount,
+            pendingPdfCount: pendingPdfCount,
+          ));
+        }
+      }
+
+      items.sort((a, b) {
+        if (a.needsCourseApproval != b.needsCourseApproval) {
+          return a.needsCourseApproval ? -1 : 1;
+        }
+        return a.course.category.compareTo(b.course.category);
+      });
+      return items;
+    });
   }
 
   Future<List<VideoModel>> getPendingContent() async {

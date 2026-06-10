@@ -10,8 +10,10 @@ import '../../../../models/app_models.dart';
 import '../../../../services/course_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:video_player/video_player.dart';
+import '../../../../services/bunny_storage_service.dart';
+import '../../../../services/bunny_stream_service.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class VideoUploadScreen extends StatefulWidget {
   final CourseModel? course;
@@ -809,21 +811,45 @@ class _VideoUploadScreenState extends State<VideoUploadScreen> {
 
     try {
       if (_isPdf && _selectedPdfFile != null) {
-        final ref = FirebaseStorage.instance.ref().child('courses/${course.id}/pdfs/${DateTime.now().millisecondsSinceEpoch}_${_selectedPdfFile!.path.split('/').last.split('\\').last}');
-        await ref.putFile(_selectedPdfFile!);
-        finalStorageUrl = await ref.getDownloadURL();
+        final bunnyStorage = BunnyStorageService();
+        final url = await bunnyStorage.uploadFile(
+          file: _selectedPdfFile!,
+          path: 'bharatm_library/pdfs/${DateTime.now().millisecondsSinceEpoch}_${_selectedPdfFile!.path.split('/').last.split('\\').last}',
+        );
+        if (url == null) throw Exception('Failed to upload PDF');
+        finalStorageUrl = url;
       } else if (!_isPdf && _selectedVideoFile != null) {
-        // Upload video file
-        final ref = FirebaseStorage.instance.ref().child('courses/${course.id}/videos/${DateTime.now().millisecondsSinceEpoch}_${_selectedVideoFile!.path.split('/').last.split('\\').last}');
-        await ref.putFile(_selectedVideoFile!);
-        finalStorageUrl = await ref.getDownloadURL();
-
-        // Upload thumbnail if selected
+        // Upload video to Bunny Stream
+        final bunnyStream = BunnyStreamService();
+        
+        // Upload thumbnail if selected — failure is non-fatal, the video
+        // is still saved to Firestore with an empty thumbnail URL.
         if (_selectedThumbnailFile != null) {
-          final thumbRef = FirebaseStorage.instance.ref().child('courses/${course.id}/thumbnails/${DateTime.now().millisecondsSinceEpoch}_${_selectedThumbnailFile!.path.split('/').last.split('\\').last}');
-          await thumbRef.putFile(_selectedThumbnailFile!);
-          finalThumbnailUrl = await thumbRef.getDownloadURL();
+          try {
+            final fileName = 'video_thumb_${DateTime.now().millisecondsSinceEpoch}.jpg';
+            final bunnyStorage = BunnyStorageService();
+            final url = await bunnyStorage.uploadFile(
+              file: _selectedThumbnailFile!,
+              path: 'bharatm_library/thumbnails/$fileName',
+            );
+            
+            if (url == null) throw Exception('Failed to upload video thumbnail');
+            
+            finalThumbnailUrl = url;
+          } catch (thumbErr) {
+            debugPrint('Thumbnail upload failed (non-fatal): $thumbErr');
+          }
         }
+        
+        final bunnyResult = await bunnyStream.uploadVideo(
+          file: _selectedVideoFile!,
+          title: title,
+          onProgress: (_) {}, // progress not shown in this screen
+        );
+        if (bunnyResult == null) throw Exception('Failed to upload video to Bunny Stream');
+        finalStorageUrl = bunnyResult['storageUrl']!;
+        final bunnyVideoId = bunnyResult['bunnyVideoId']!;
+
 
         // Auto-extract video duration
         try {
@@ -837,6 +863,28 @@ class _VideoUploadScreenState extends State<VideoUploadScreen> {
         } catch (ex) {
           debugPrint('Error extracting video duration: $ex');
         }
+
+        // Save to Firestore with bunnyVideoId
+        await _courseService.uploadCourseContent(
+          courseId: course.id,
+          title: title,
+          contentType: CourseContentType.video,
+          storageUrl: finalStorageUrl,
+          bunnyVideoId: bunnyVideoId,
+          isFree: _isFree,
+          thumbnailUrl: finalThumbnailUrl,
+          durationMinutes: durationMinutes,
+        );
+        if (!mounted) return;
+        _showMessage('Content uploaded for admin approval.');
+        _titleController.clear();
+        _storageUrlController.clear();
+        _selectedPdfFile = null;
+        _selectedVideoFile = null;
+        _selectedThumbnailFile = null;
+        await _loadExistingVideos();
+        Navigator.pop(context, true);
+        return; // early return — Firestore write already done above
       }
 
       await _courseService.uploadCourseContent(
