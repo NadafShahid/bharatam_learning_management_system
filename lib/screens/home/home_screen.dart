@@ -472,7 +472,9 @@ class _HomeScreenState extends State<HomeScreen>
                           padding: const EdgeInsets.fromLTRB(
                             AppSpacing.xxl, AppSpacing.xxl, AppSpacing.xxl, 0,
                           ),
-                          child: _AdvertisementCard(ad: _advertisements.isNotEmpty ? _advertisements.first : null),
+                          child: _advertisements.isNotEmpty
+                              ? _AdvertisementCarousel(ads: _advertisements)
+                              : const _AdvertisementCard(ad: null),
                         ),
                       ),
                     ),
@@ -885,7 +887,7 @@ class _HomeScreenState extends State<HomeScreen>
                         icon: Icons.workspace_premium_outlined,
                         iconColor: const Color(0xFFD4AF37),
                         iconBgColor: const Color(0xFFD4AF37).withValues(alpha: 0.1),
-                        count: _purchasedCompleted.length,
+                        count: _purchasedCourses.length,
                         onTap: () {
                           Navigator.pop(context); // Close Drawer
                           Navigator.push(
@@ -1119,6 +1121,112 @@ class _HeaderNotificationBell extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AdvertisementCarousel extends StatefulWidget {
+  final List<Advertisement> ads;
+
+  const _AdvertisementCarousel({required this.ads});
+
+  @override
+  State<_AdvertisementCarousel> createState() => _AdvertisementCarouselState();
+}
+
+class _AdvertisementCarouselState extends State<_AdvertisementCarousel> {
+  late PageController _pageController;
+  Timer? _timer;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: 0);
+    if (widget.ads.length > 1) {
+      _startTimer();
+    }
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (!mounted) return;
+      if (_pageController.hasClients) {
+        int nextPage = _currentPage + 1;
+        if (nextPage >= widget.ads.length) {
+          nextPage = 0;
+          _pageController.animateToPage(
+            nextPage,
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.fastOutSlowIn,
+          );
+        } else {
+          _pageController.animateToPage(
+            nextPage,
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.fastOutSlowIn,
+          );
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.ads.isEmpty) {
+      return const _AdvertisementCard(ad: null);
+    }
+    if (widget.ads.length == 1) {
+      return _AdvertisementCard(ad: widget.ads.first);
+    }
+
+    return SizedBox(
+      height: 180,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            onPageChanged: (index) {
+              setState(() {
+                _currentPage = index;
+              });
+            },
+            itemCount: widget.ads.length,
+            itemBuilder: (context, index) {
+              return _AdvertisementCard(ad: widget.ads[index]);
+            },
+          ),
+          Positioned(
+            bottom: 12,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                widget.ads.length,
+                (index) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: _currentPage == index ? 24 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _currentPage == index 
+                        ? Colors.white 
+                        : Colors.white.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

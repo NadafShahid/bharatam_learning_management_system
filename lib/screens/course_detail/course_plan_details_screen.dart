@@ -7,6 +7,7 @@ import '../../models/app_models.dart';
 import '../../widgets/gradient_button.dart';
 import '../../widgets/animations.dart';
 import '../../widgets/module_accordion.dart';
+import '../../widgets/bunny_storage_image.dart';
 import '../../services/subscription_service.dart';
 import '../../services/user_service.dart';
 import '../../services/whatsapp_service.dart';
@@ -622,7 +623,7 @@ class _CoursePlanDetailsScreenState extends State<CoursePlanDetailsScreen> {
           decoration: BoxDecoration(
             image: widget.course.thumbnailUrl.isNotEmpty
                 ? DecorationImage(
-                    image: NetworkImage(widget.course.thumbnailUrl),
+                    image: bunnyStorageNetworkImage(widget.course.thumbnailUrl),
                     fit: BoxFit.cover,
                     colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.5), BlendMode.darken),
                   )

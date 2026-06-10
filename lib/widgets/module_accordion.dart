@@ -5,6 +5,7 @@ import '../models/app_models.dart';
 import '../services/student_learning_service.dart';
 import 'commerce_widgets.dart';
 import 'animations.dart';
+import 'bunny_storage_image.dart';
 
 /// An expandable module card that shows its videos when tapped.
 class ModuleAccordion extends StatefulWidget {
@@ -280,14 +281,14 @@ class VideoRow extends StatelessWidget {
                     ? AppColors.primary.withValues(alpha: 0.1)
                     : AppColors.background,
                 borderRadius: BorderRadius.circular(AppRadius.sm),
-                image: (video.thumbnailUrl.isNotEmpty && video.contentType == CourseContentType.video)
+                image: (video.resolvedThumbnailUrl.isNotEmpty && video.contentType == CourseContentType.video)
                     ? DecorationImage(
-                        image: NetworkImage(video.thumbnailUrl),
+                        image: bunnyStorageNetworkImage(video.resolvedThumbnailUrl),
                         fit: BoxFit.cover,
                       )
                     : null,
               ),
-              child: (video.thumbnailUrl.isNotEmpty && video.contentType == CourseContentType.video)
+              child: (video.resolvedThumbnailUrl.isNotEmpty && video.contentType == CourseContentType.video)
                   ? (!canPlay
                       ? Container(
                           decoration: BoxDecoration(

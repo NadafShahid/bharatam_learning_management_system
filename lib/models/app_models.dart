@@ -319,6 +319,23 @@ class VideoModel {
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
     );
   }
+
+  String get resolvedThumbnailUrl {
+    if (thumbnailUrl.isNotEmpty) {
+      return thumbnailUrl;
+    }
+    if (bunnyVideoId.isNotEmpty) {
+      return 'https://vz-5549fe19-18c.b-cdn.net/$bunnyVideoId/thumbnail.jpg';
+    }
+    if (storageUrl.isNotEmpty && storageUrl.contains('vz-5549fe19-18c.b-cdn.net')) {
+      final uri = Uri.tryParse(storageUrl);
+      if (uri != null && uri.pathSegments.isNotEmpty) {
+        final videoId = uri.pathSegments.first;
+        return 'https://vz-5549fe19-18c.b-cdn.net/$videoId/thumbnail.jpg';
+      }
+    }
+    return '';
+  }
 }
 
 class PurchaseRecord {

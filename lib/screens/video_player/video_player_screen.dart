@@ -13,7 +13,6 @@ import '../../services/bunny_stream_service.dart';
 import '../../models/app_models.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/animations.dart';
-import '../../widgets/video_list_item.dart';
 import '../certificate/certificate_screen.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
@@ -48,7 +47,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       MethodChannel('bharatam_lms/content_protection');
 
   /// Bunny Stream library ID — must match BunnyStreamService.libraryId
-  static const String _bunnyLibraryId = '663705';
+  static const String _bunnyLibraryId = '676379';
 
   final StudentLearningService _learningService = StudentLearningService();
   String _studentName = 'Student';

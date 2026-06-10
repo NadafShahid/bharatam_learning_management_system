@@ -7,7 +7,7 @@ import 'theme/app_theme.dart';
 import 'screens/splash/splash_screen.dart';
 import 'services/user_service.dart';
 import 'core/localization.dart';
-
+//
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(

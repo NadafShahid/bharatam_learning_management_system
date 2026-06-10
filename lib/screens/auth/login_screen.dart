@@ -25,6 +25,8 @@ class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   final _phoneController = TextEditingController();
   bool _showOtp = false;
+  bool _isVerifying = false; // loading flag for OTP verify
+  bool _isSendingOtp = false; // loading flag for OTP send
   String _registeredRole = 'student'; // Default role
   String? _serverOtp;
 
@@ -65,6 +67,9 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _sendOtp() async {
+    if (_isSendingOtp) return;
+    setState(() => _isSendingOtp = true);
+
     HapticFeedback.mediumImpact();
     final phone = _phoneController.text.trim();
 
@@ -72,6 +77,7 @@ class _LoginScreenState extends State<LoginScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a valid 10-digit phone number.')),
       );
+      setState(() => _isSendingOtp = false);
       return;
     }
 
@@ -80,7 +86,10 @@ class _LoginScreenState extends State<LoginScreen>
       _serverOtp = _bypassOtp;
       _registeredRole = (phone == _trainerBypass) ? 'trainer' : 'student';
       
-      setState(() => _showOtp = true);
+      setState(() {
+        _showOtp = true;
+        _isSendingOtp = false;
+      });
       _animController.reset();
       _animController.forward();
       Future.delayed(const Duration(milliseconds: 300), () {
@@ -90,6 +99,25 @@ class _LoginScreenState extends State<LoginScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Bypass Mode: Logged in as ${_registeredRole.toUpperCase()}')),
       );
+      return;
+    }
+
+    try {
+      final user = await UserService().getUserByPhone(phone);
+      if (!mounted) return;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Account not found. Please register and create an account first.')),
+        );
+        setState(() => _isSendingOtp = false);
+        return;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error verifying account. Please try again.')),
+      );
+      setState(() => _isSendingOtp = false);
       return;
     }
 
@@ -104,16 +132,29 @@ class _LoginScreenState extends State<LoginScreen>
       'senderid': 'EXTSKL',
     });
 
+    int? statusCode;
+    String? body;
+
     try {
       final client = HttpClient();
-      final request = await client.getUrl(uri);
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
+      client.connectionTimeout = const Duration(seconds: 15);
+
+      await Future(() async {
+        final request = await client.getUrl(uri);
+        final response = await request.close();
+        statusCode = response.statusCode;
+        body = await response.transform(utf8.decoder).join();
+      }).timeout(const Duration(seconds: 30));
+
       client.close();
 
-      final normalizedResponse = body.toLowerCase();
-      final isSuccess = response.statusCode >= 200 &&
-          response.statusCode < 300 &&
+      if (statusCode == null || body == null) {
+        throw const HttpException('Failed to read response from SMS gateway');
+      }
+
+      final normalizedResponse = body!.toLowerCase();
+      final isSuccess = statusCode! >= 200 &&
+          statusCode! < 300 &&
           (normalizedResponse.contains('success') ||
               normalizedResponse.contains('submit_success') ||
               normalizedResponse.contains('submitted'));
@@ -124,6 +165,7 @@ class _LoginScreenState extends State<LoginScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('OTP API Error: $body')),
         );
+        setState(() => _isSendingOtp = false);
         return;
       }
 
@@ -133,10 +175,14 @@ class _LoginScreenState extends State<LoginScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Network Error. Please check internet.')),
       );
+      setState(() => _isSendingOtp = false);
       return;
     }
 
-    setState(() => _showOtp = true);
+    setState(() {
+      _showOtp = true;
+      _isSendingOtp = false;
+    });
     _animController.reset();
     _animController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
@@ -145,6 +191,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _verifyOtp() async {
+    if (_isVerifying) return; // prevent double-tap
     HapticFeedback.heavyImpact();
     final enteredOtp = _otpControllers.map((controller) => controller.text).join();
 
@@ -162,51 +209,71 @@ class _LoginScreenState extends State<LoginScreen>
       return;
     }
 
-    // Persist login state
-    const storage = FlutterSecureStorage();
-    
-    // Fetch actual user role and ID from DB
-    String finalRole = _registeredRole;
-    String finalUserId = '';
-    final phone = _phoneController.text.trim();
+    setState(() => _isVerifying = true);
 
-    if (_serverOtp == _bypassOtp) {
-      if (phone == _studentBypass) {
-        finalUserId = 'bypass_student';
-      } else if (phone == _trainerBypass) {
-        finalUserId = 'bypass_trainer';
+    try {
+      // Persist login state
+      const storage = FlutterSecureStorage();
+
+      // Fetch actual user role and ID from DB
+      String finalRole = _registeredRole;
+      String finalUserId = '';
+      final phone = _phoneController.text.trim();
+
+      if (_serverOtp == _bypassOtp) {
+        if (phone == _studentBypass) {
+          finalUserId = 'bypass_student';
+        } else if (phone == _trainerBypass) {
+          finalUserId = 'bypass_trainer';
+        }
+      } else {
+        final user = await UserService().getUserByPhone(phone);
+        if (!mounted) return;
+        if (user != null) {
+          finalRole = user.role;
+          finalUserId = user.id;
+        } else {
+          setState(() => _isVerifying = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Account not found. Please register and create an account first.')),
+          );
+          return;
+        }
       }
-    } else {
-      final user = await UserService().getUserByPhone(phone);
-      if (user != null) {
-        finalRole = user.role;
-        finalUserId = user.id;
+
+      await storage.write(key: 'isLoggedIn', value: 'true');
+      await storage.write(key: 'role', value: finalRole);
+      await storage.write(key: 'userPhone', value: phone);
+      if (finalUserId.isNotEmpty) {
+        await storage.write(key: 'userId', value: finalUserId);
+        UserService.setCachedUserId(finalUserId);
+        // Also pre-warm the learning service cache so it never needs
+        // an extra Firestore query to resolve the current student id.
+        StudentLearningService.setCachedUserId(finalUserId);
       }
-    }
 
-    await storage.write(key: 'isLoggedIn', value: 'true');
-    await storage.write(key: 'role', value: finalRole);
-    await storage.write(key: 'userPhone', value: phone);
-    if (finalUserId.isNotEmpty) {
-      await storage.write(key: 'userId', value: finalUserId);
-      UserService.setCachedUserId(finalUserId);
-      // Also pre-warm the learning service cache so it never needs
-      // an extra Firestore query to resolve the current student id.
-      StudentLearningService.setCachedUserId(finalUserId);
-    }
+      if (!mounted) return;
 
-    if (finalRole == 'trainer') {
-      _navigate(const TrainerShell());
-    } else {
-      _navigate(const MainShell());
+      if (finalRole == 'trainer') {
+        _navigate(const TrainerShell());
+      } else {
+        _navigate(const MainShell());
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isVerifying = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Login failed: ${e.toString()}')),
+      );
     }
   }
 
   void _navigate(Widget screen) {
     Navigator.of(context).pushAndRemoveUntil(
       PageRouteBuilder(
-        pageBuilder: (_, _, _) => screen,
-        transitionsBuilder: (_, animation, _, child) {
+        settings: const RouteSettings(name: '/home'),
+        pageBuilder: (_, __, ___) => screen,
+        transitionsBuilder: (_, animation, __, child) {
           return FadeTransition(
             opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
             child: ScaleTransition(
@@ -352,8 +419,9 @@ class _LoginScreenState extends State<LoginScreen>
                               final result = await Navigator.push(
                                 context,
                                 PageRouteBuilder(
-                                  pageBuilder: (_, _, _) => const RegisterScreen(),
-                                  transitionsBuilder: (_, animation, _, child) {
+                                  settings: const RouteSettings(name: '/register'),
+                                  pageBuilder: (_, __, ___) => const RegisterScreen(),
+                                  transitionsBuilder: (_, animation, __, child) {
                                     return FadeTransition(
                                       opacity: animation,
                                       child: SlideTransition(
@@ -452,12 +520,14 @@ class _LoginScreenState extends State<LoginScreen>
           ),
         ),
         const SizedBox(height: AppSpacing.xxl),
-        GradientButton(
-          text: 'Send OTP',
-          onPressed: _sendOtp,
-          borderRadius: AppRadius.pill,
-          icon: Icons.send_rounded,
-        ),
+        _isSendingOtp
+            ? const Center(child: CircularProgressIndicator())
+            : GradientButton(
+                text: 'Send OTP',
+                onPressed: _sendOtp,
+                borderRadius: AppRadius.pill,
+                icon: Icons.send_rounded,
+              ),
       ],
     );
   }
@@ -485,12 +555,14 @@ class _LoginScreenState extends State<LoginScreen>
           )),
         ),
         const SizedBox(height: AppSpacing.xxl),
-        GradientButton(
-          text: 'Verify & Continue',
-          onPressed: _verifyOtp,
-          borderRadius: AppRadius.pill,
-          icon: Icons.verified_rounded,
-        ),
+        _isVerifying
+            ? const Center(child: CircularProgressIndicator())
+            : GradientButton(
+                text: 'Verify & Continue',
+                onPressed: _verifyOtp,
+                borderRadius: AppRadius.pill,
+                icon: Icons.verified_rounded,
+              ),
         const SizedBox(height: AppSpacing.lg),
         Center(
           child: TextButton(

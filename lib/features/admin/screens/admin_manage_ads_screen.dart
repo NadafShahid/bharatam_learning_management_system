@@ -6,7 +6,7 @@ import '../../../../widgets/gradient_button.dart';
 import '../../../../services/ad_service.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import '../../../../services/bunny_storage_service.dart';
 
 class AdminManageAdsScreen extends StatefulWidget {
   const AdminManageAdsScreen({super.key});
@@ -111,10 +111,12 @@ class _AdminManageAdsScreenState extends State<AdminManageAdsScreen> {
       try {
         final file = File(image.path);
         final fileName = 'ad_banner_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final ref = FirebaseStorage.instance.ref().child('advertisements/$fileName');
-
-        await ref.putFile(file);
-        final url = await ref.getDownloadURL();
+        final bunnyStorage = BunnyStorageService();
+        final url = await bunnyStorage.uploadFile(
+          file: file,
+          path: 'advertisements/$fileName',
+        );
+        if (url == null) throw Exception('Failed to upload ad banner');
 
         final ad = Advertisement(
           id: '',

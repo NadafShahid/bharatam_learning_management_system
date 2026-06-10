@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import 'bunny_storage_image.dart';
 
 class InstructorAvatarList extends StatelessWidget {
   final List<InstructorData> instructors;
@@ -64,8 +65,8 @@ class _InstructorAvatar extends StatelessWidget {
                 child: Center(
                   child: data.imageUrl.isNotEmpty
                       ? ClipOval(
-                          child: Image.network(
-                            data.imageUrl,
+                          child: BunnyStorageImage(
+                            imageUrl: data.imageUrl,
                             width: 56,
                             height: 56,
                             fit: BoxFit.cover,

@@ -9,6 +9,7 @@ import '../../widgets/animations.dart';
 import '../course_detail/course_detail_screen_v2.dart';
 import '../../models/app_models.dart';
 import '../../services/course_service.dart';
+import '../../services/category_service.dart';
 import '../../core/localization.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -20,7 +21,7 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClientMixin {
   final _searchController = TextEditingController();
   int _selectedFilter = 0;
-  final _filters = ['All', 'Free', 'Paid', 'Hindi', 'English', 'Sanskrit'];
+  List<String> _filters = ['All'];
   
   static const _storage = FlutterSecureStorage();
   static const _recentSearchesKey = 'recent_searches';
@@ -38,6 +39,20 @@ class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClie
     super.initState();
     _loadCourses();
     _loadRecentSearches();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final categories = await CategoryService().getCategories();
+      if (mounted) {
+        setState(() {
+          _filters = ['All', ...categories];
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading categories in SearchScreen: $e');
+    }
   }
 
   Future<void> _loadRecentSearches() async {
@@ -135,29 +150,9 @@ class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClie
     }
     
     final filterName = _filters[_selectedFilter];
-    if (filterName == 'Free') {
-      return list.where((c) => c.price == 0).toList();
-    } else if (filterName == 'Paid') {
-      return list.where((c) => c.price > 0).toList();
-    } else if (filterName == 'Hindi') {
-      return list.where((c) =>
-        c.title.toLowerCase().contains('hindi') ||
-        c.description.toLowerCase().contains('hindi')
-      ).toList();
-    } else if (filterName == 'English') {
-      return list.where((c) =>
-        c.title.toLowerCase().contains('english') ||
-        c.description.toLowerCase().contains('english')
-      ).toList();
-    } else if (filterName == 'Sanskrit') {
-      return list.where((c) =>
-        c.category.toLowerCase().contains('sanskrit') ||
-        c.title.toLowerCase().contains('sanskrit') ||
-        c.description.toLowerCase().contains('sanskrit')
-      ).toList();
-    }
-    
-    return list;
+    return list.where((c) =>
+      c.category.toLowerCase().contains(filterName.toLowerCase())
+    ).toList();
   }
 
   bool get _shouldShowResults => _hasQuery || _selectedFilter != 0;
@@ -235,14 +230,18 @@ class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClie
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     itemCount: _filters.length,
                     separatorBuilder: (_, _) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) => CategoryChip(
-                      label: T.get('filter_${_filters[i].toLowerCase()}'),
-                      isSelected: _selectedFilter == i,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        setState(() => _selectedFilter = i);
-                      },
-                    ),
+                    itemBuilder: (_, i) {
+                      final filterText = _filters[i];
+                      final label = filterText == 'All' ? T.get('filter_all') : filterText;
+                      return CategoryChip(
+                        label: label,
+                        isSelected: _selectedFilter == i,
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _selectedFilter = i);
+                        },
+                      );
+                    },
                   ),
                 ),
               ),
