@@ -10,6 +10,7 @@ import '../../widgets/module_accordion.dart';
 import '../../widgets/bunny_storage_image.dart';
 import '../../services/subscription_service.dart';
 import '../../services/user_service.dart';
+import '../../services/wallet_service.dart';
 import '../../services/whatsapp_service.dart';
 import '../../widgets/instructor_avatar.dart';
 import '../home/trainer_profile_screen.dart';
@@ -142,7 +143,7 @@ class _CoursePlanDetailsScreenState extends State<CoursePlanDetailsScreen> {
     final transactionId = response.paymentId ?? 'TXN${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
 
     try {
-      await FirebaseFirestore.instance.collection('purchases').add({
+      final purchaseRef = await FirebaseFirestore.instance.collection('purchases').add({
         'userId': _userService.currentUserId,
         'courseId': widget.course.id,
         'moduleId': null,
@@ -159,6 +160,15 @@ class _CoursePlanDetailsScreenState extends State<CoursePlanDetailsScreen> {
         'razorpayOrderId': response.orderId,
         'razorpaySignature': response.signature,
       });
+
+      // Credit trainer share into their wallet balance
+      await WalletService().creditTrainerWallet(
+        purchaseId: purchaseRef.id,
+        trainerId: widget.course.trainerId,
+        trainerShare: trainerShare,
+        amountPaid: amountPaid,
+        description: 'Earnings from ${widget.course.title} (Course)',
+      );
 
       if (widget.onPurchaseSuccess != null) {
         widget.onPurchaseSuccess!();

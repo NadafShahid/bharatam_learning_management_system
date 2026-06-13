@@ -7,6 +7,7 @@ import 'commerce_widgets.dart';
 import 'animations.dart';
 
 import '../services/user_service.dart';
+import '../services/wallet_service.dart';
 import '../services/whatsapp_service.dart';
 import '../screens/course_detail/course_plan_details_screen.dart';
 
@@ -228,7 +229,7 @@ class PurchaseBottomSheet extends StatelessWidget {
     final transactionId = 'TXN${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
 
     try {
-      await FirebaseFirestore.instance.collection('purchases').add({
+      final purchaseRef = await FirebaseFirestore.instance.collection('purchases').add({
         'userId': UserService().currentUserId,
         'courseId': course.id,
         'moduleId': moduleId,
@@ -243,6 +244,15 @@ class PurchaseBottomSheet extends StatelessWidget {
         'purchasedAt': FieldValue.serverTimestamp(),
         'planType': planType, // Securely persist plan tier
       });
+
+      // Credit trainer share into their wallet balance
+      await WalletService().creditTrainerWallet(
+        purchaseId: purchaseRef.id,
+        trainerId: course.trainerId,
+        trainerShare: trainerShare,
+        amountPaid: amountPaid,
+        description: 'Earnings from ${course.title} (${type.toString().split('.').last})',
+      );
 
       final typeLabel = switch (type) {
         PurchaseType.course => planType == 'limited'

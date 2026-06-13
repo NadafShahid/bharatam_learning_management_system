@@ -15,6 +15,7 @@ import '../../../../services/bunny_storage_service.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../../../models/app_models.dart';
+import '../../../../screens/course_detail/course_detail_screen_v2.dart';
 
 class CreateCourseScreen extends StatefulWidget {
   final CourseModel? existingCourse;
@@ -45,10 +46,13 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
   bool _isSubmitting = false;
   bool _isUploadingThumbnail = false;
   final List<_CourseFile> _courseFiles = [];
+  String? _courseId;
+  bool _isPreviewing = false;
 
   @override
   void initState() {
     super.initState();
+    _courseId = widget.existingCourse?.id;
     _limitedTimeDaysController.text = '30';
     if (widget.existingCourse != null) {
       final c = widget.existingCourse!;
@@ -207,6 +211,26 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
             Navigator.pop(context);
           },
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: TextButton.icon(
+              onPressed: (_isSavingDraft || _isSubmitting || _isPreviewing) ? null : _previewCourse,
+              icon: _isPreviewing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                    )
+                  : const Icon(Icons.visibility_rounded, size: 20),
+              label: const Text('Preview'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                textStyle: AppTextStyles.labelMedium.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         controller: _scrollController,
@@ -537,17 +561,26 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
                       gradient: AppGradients.secondary,
                       isLoading: _isSavingDraft,
                       onPressed: () {
-                        if (!_isSavingDraft && !_isSubmitting) _saveCourse(isDraft: true);
+                        if (!_isSavingDraft && !_isSubmitting && !_isPreviewing) _saveCourse(isDraft: true);
                       },
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.lg),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: GradientButton(
+                      text: 'Preview',
+                      gradient: AppGradients.orangeSunset,
+                      isLoading: _isPreviewing,
+                      onPressed: _previewCourse,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: GradientButton(
                       text: _isSubmitting ? 'Submitting...' : 'Submit',
                       isLoading: _isSubmitting,
                       onPressed: () {
-                        if (!_isSavingDraft && !_isSubmitting) _saveCourse(isDraft: false);
+                        if (!_isSavingDraft && !_isSubmitting && !_isPreviewing) _saveCourse(isDraft: false);
                       },
                     ),
                   ),
@@ -615,18 +648,18 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
     );
   }
 
-  Future<void> _saveCourse({required bool isDraft}) async {
+  Future<String?> _saveCourse({required bool isDraft, bool isForPreview = false}) async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       _showMessage('Please enter course title.', isError: true);
-      return;
+      return null;
     }
 
     final selectedCategory = _selectedCategory?.trim();
     if (selectedCategory == null || selectedCategory.isEmpty) {
       _scrollToCategory();
       _showMessage('Please select a category before uploading the course.', isError: true);
-      return;
+      return null;
     }
     
     final description = _descriptionController.text.trim();
@@ -644,8 +677,8 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
     try {
       String courseId;
       final status = isDraft ? 'draft' : 'pending';
-      if (widget.existingCourse != null) {
-        courseId = widget.existingCourse!.id;
+      if (_courseId != null) {
+        courseId = _courseId!;
         await _courseService.updateCourse(
           courseId: courseId,
           title: title,
@@ -674,11 +707,15 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
           trainerName: 'Trainer',
           approvalStatus: status,
         );
+        setState(() {
+          _courseId = courseId;
+        });
       }
 
       // Upload newly added files — each file is handled independently so that
       // a single failed upload does not roll back the course creation in Firestore.
       int failedUploads = 0;
+      final List<_CourseFile> uploadedItems = [];
       for (final item in _courseFiles) {
         try {
           if (item.videoUrl != null) {
@@ -694,6 +731,7 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
               thumbnailUrl: item.thumbnailUrl,
               isFree: item.isFree,
             );
+            uploadedItems.add(item);
           } else if (item.file != null) {
             if (mounted) setState(() => item.isUploading = true);
             if (item.type == CourseContentType.video) {
@@ -722,6 +760,7 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
                 thumbnailUrl: item.thumbnailUrl,
                 isFree: item.isFree,
               );
+              uploadedItems.add(item);
             } else {
               // PDF — upload to Bunny Storage
               final fileName = '${DateTime.now().millisecondsSinceEpoch}_${item.originalName}';
@@ -749,6 +788,7 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
                 thumbnailUrl: item.thumbnailUrl,
                 isFree: item.isFree,
               );
+              uploadedItems.add(item);
             }
             if (mounted) setState(() => item.isUploading = false);
           }
@@ -759,7 +799,26 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
         }
       }
 
-      if (!mounted) return;
+      // Remove successfully uploaded files from list
+      setState(() {
+        for (final item in uploadedItems) {
+          _courseFiles.remove(item);
+        }
+      });
+
+      if (!mounted) return courseId;
+
+      if (isForPreview) {
+        if (failedUploads > 0) {
+          _showMessage(
+            'Saved draft, but $failedUploads file(s) failed to upload.',
+            isError: true,
+          );
+        } else {
+          _showMessage('Draft saved successfully.');
+        }
+        return courseId;
+      }
 
       if (failedUploads > 0) {
         // Course was saved in Firestore but some files failed to upload.
@@ -775,14 +834,51 @@ class _CreateCourseScreenState extends State<CreateCourseScreen> {
             ? 'Course draft and content saved.'
             : 'Course and content submitted for admin approval.');
       }
+      return courseId;
     } catch (e) {
       if (mounted) _showMessage('Unable to save course: ${e.toString()}', isError: true);
+      return null;
     } finally {
       if (mounted) {
         setState(() {
           _isSavingDraft = false;
           _isSubmitting = false;
         });
+      }
+    }
+  }
+
+  Future<void> _previewCourse() async {
+    if (_isSavingDraft || _isSubmitting || _isPreviewing) return;
+    
+    HapticFeedback.mediumImpact();
+    setState(() => _isPreviewing = true);
+
+    try {
+      // Save course as a draft first
+      final courseId = await _saveCourse(isDraft: true, isForPreview: true);
+      if (courseId != null) {
+        // Fetch full course details to pass to the preview screen
+        final course = await _courseService.getCourseById(courseId);
+        if (course != null && mounted) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CourseDetailScreenV2(
+                course: course,
+                isTrainerPreview: true,
+              ),
+            ),
+          );
+        } else {
+          _showMessage('Unable to load preview data.', isError: true);
+        }
+      }
+    } catch (e) {
+      _showMessage('Failed to open preview: ${e.toString()}', isError: true);
+    } finally {
+      if (mounted) {
+        setState(() => _isPreviewing = false);
       }
     }
   }

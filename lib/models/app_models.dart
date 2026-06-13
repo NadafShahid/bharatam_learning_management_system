@@ -2,6 +2,8 @@
 /// These drive UI rendering and access-control logic without a backend.
 library;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 enum PurchaseType { course, module, video }
 enum VideoStatus { active, deleted }
 enum TrainerPlan { free, perVideo, monthly }
@@ -516,3 +518,152 @@ class DummyData {
     ),
   ];
 }
+
+class TrainerWalletModel {
+  final String trainerId;
+  final double balance;
+  final double totalEarnings;
+  final double totalWithdrawn;
+  final double pendingWithdrawal;
+  final DateTime updatedAt;
+
+  const TrainerWalletModel({
+    required this.trainerId,
+    this.balance = 0.0,
+    this.totalEarnings = 0.0,
+    this.totalWithdrawn = 0.0,
+    this.pendingWithdrawal = 0.0,
+    required this.updatedAt,
+  });
+
+  factory TrainerWalletModel.fromMap(Map<String, dynamic> map, String trainerId) {
+    return TrainerWalletModel(
+      trainerId: trainerId,
+      balance: (map['balance'] ?? 0.0).toDouble(),
+      totalEarnings: (map['totalEarnings'] ?? 0.0).toDouble(),
+      totalWithdrawn: (map['totalWithdrawn'] ?? 0.0).toDouble(),
+      pendingWithdrawal: (map['pendingWithdrawal'] ?? 0.0).toDouble(),
+      updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'trainerId': trainerId,
+      'balance': balance,
+      'totalEarnings': totalEarnings,
+      'totalWithdrawn': totalWithdrawn,
+      'pendingWithdrawal': pendingWithdrawal,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+  }
+}
+
+class WalletTransactionModel {
+  final String id;
+  final String trainerId;
+  final double amount;
+  final String type; // 'earnings_credit', 'withdrawal_request', 'withdrawal_approval', 'withdrawal_rejection'
+  final String status; // 'pending', 'completed', 'rejected'
+  final String referenceId; // links to purchase ID or withdrawal request ID
+  final String description;
+  final DateTime timestamp;
+
+  const WalletTransactionModel({
+    required this.id,
+    required this.trainerId,
+    required this.amount,
+    required this.type,
+    required this.status,
+    required this.referenceId,
+    required this.description,
+    required this.timestamp,
+  });
+
+  factory WalletTransactionModel.fromMap(Map<String, dynamic> map, String id) {
+    return WalletTransactionModel(
+      id: id,
+      trainerId: map['trainerId'] ?? '',
+      amount: (map['amount'] ?? 0.0).toDouble(),
+      type: map['type'] ?? '',
+      status: map['status'] ?? 'pending',
+      referenceId: map['referenceId'] ?? '',
+      description: map['description'] ?? '',
+      timestamp: (map['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'trainerId': trainerId,
+      'amount': amount,
+      'type': type,
+      'status': status,
+      'referenceId': referenceId,
+      'description': description,
+      'timestamp': FieldValue.serverTimestamp(),
+    };
+  }
+}
+
+class WithdrawalRequestModel {
+  final String id;
+  final String trainerId;
+  final double amount;
+  final String status; // 'pending', 'approved', 'rejected'
+  final DateTime requestedAt;
+  final DateTime? processedAt;
+  final String? rejectionReason;
+  
+  // Bank details captured at the time of request
+  final String bankName;
+  final String bankAccount;
+  final String ifscCode;
+  final String upiId;
+
+  const WithdrawalRequestModel({
+    required this.id,
+    required this.trainerId,
+    required this.amount,
+    required this.status,
+    required this.requestedAt,
+    this.processedAt,
+    this.rejectionReason,
+    required this.bankName,
+    required this.bankAccount,
+    required this.ifscCode,
+    required this.upiId,
+  });
+
+  factory WithdrawalRequestModel.fromMap(Map<String, dynamic> map, String id) {
+    return WithdrawalRequestModel(
+      id: id,
+      trainerId: map['trainerId'] ?? '',
+      amount: (map['amount'] ?? 0.0).toDouble(),
+      status: map['status'] ?? 'pending',
+      requestedAt: (map['requestedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      processedAt: (map['processedAt'] as Timestamp?)?.toDate(),
+      rejectionReason: map['rejectionReason'],
+      bankName: map['bankName'] ?? '',
+      bankAccount: map['bankAccount'] ?? '',
+      ifscCode: map['ifscCode'] ?? '',
+      upiId: map['upiId'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'trainerId': trainerId,
+      'amount': amount,
+      'status': status,
+      'requestedAt': FieldValue.serverTimestamp(),
+      'processedAt': processedAt != null ? Timestamp.fromDate(processedAt!) : null,
+      'rejectionReason': rejectionReason,
+      'bankName': bankName,
+      'bankAccount': bankAccount,
+      'ifscCode': ifscCode,
+      'upiId': upiId,
+    };
+  }
+}
+

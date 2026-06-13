@@ -14,6 +14,7 @@ class FirestoreSeed {
     await _seedPurchases();
     await _seedTrainerPayouts();
     await _seedCertificates();
+    await _seedTrainerWallet();
   }
 
   // ─── 1. PLATFORM CONFIG ──────────────────────────────────────
@@ -21,6 +22,7 @@ class FirestoreSeed {
   static Future<void> _seedPlatformConfig() async {
     await _db.collection('platform_config').doc('settings').set({
       'commissionPercent': 20,
+      'minWithdrawalThreshold': 1000,
       'freeUploadLimit': 5,
       'perVideoUploadPrice': 49,
       'monthlyPlanPrice': 499,
@@ -381,6 +383,30 @@ class FirestoreSeed {
       'courseName': 'Vedic Mathematics Masterclass',
       'issuedAt': FieldValue.serverTimestamp(),
       'certificateUrl': '',
+    });
+  }
+
+  // ─── 7. WALLET & TRANSACTIONS ────────────────────────────────
+  static Future<void> _seedTrainerWallet() async {
+    // Seed wallet for trainer_001
+    await _db.collection('bharatam_wallets').doc('trainer_001').set({
+      'trainerId': 'trainer_001',
+      'balance': 239.20,
+      'totalEarnings': 239.20,
+      'totalWithdrawn': 0.0,
+      'pendingWithdrawal': 0.0,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Seed ledger transaction matching purchase_001 (trainer share: 239.20)
+    await _db.collection('bharatam_wallet_transactions').doc('ledger_001').set({
+      'trainerId': 'trainer_001',
+      'amount': 239.20,
+      'type': 'earnings_credit',
+      'status': 'completed',
+      'referenceId': 'purchase_001',
+      'description': 'Earnings from Vedic Mathematics Masterclass (Module)',
+      'timestamp': FieldValue.serverTimestamp(),
     });
   }
 }

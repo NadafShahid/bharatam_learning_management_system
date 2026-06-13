@@ -4,24 +4,26 @@ import '../theme/app_theme.dart';
 
 class GradientButton extends StatefulWidget {
   final String text;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final Gradient? gradient;
   final double? width;
   final double height;
   final double borderRadius;
   final IconData? icon;
   final bool isLoading;
+  final Color? textColor;
 
   const GradientButton({
     super.key,
     required this.text,
-    required this.onPressed,
+    this.onPressed,
     this.gradient,
     this.width,
     this.height = 56,
     this.borderRadius = AppRadius.md,
     this.icon,
     this.isLoading = false,
+    this.textColor,
   });
 
   @override
@@ -58,59 +60,71 @@ class _GradientButtonState extends State<GradientButton>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) => Transform.scale(
-        scale: _scaleAnimation.value,
-        child: Container(
-          width: widget.width ?? double.infinity,
-          height: widget.height,
-          decoration: BoxDecoration(
-            gradient: widget.gradient ?? AppGradients.primary,
-            borderRadius: BorderRadius.circular(widget.borderRadius),
-            boxShadow: [
-              BoxShadow(
-                color: (widget.gradient != null
-                    ? AppColors.secondary
-                    : AppColors.primary)
-                    .withValues(alpha: 0.25 * _elevationAnimation.value),
-                blurRadius: 20 * _elevationAnimation.value,
-                offset: Offset(0, 8 * _elevationAnimation.value),
-                spreadRadius: 0,
+    final bool isDisabled = widget.onPressed == null;
+    return IgnorePointer(
+      ignoring: isDisabled || widget.isLoading,
+      child: Opacity(
+        opacity: isDisabled ? 0.6 : 1.0,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) => Transform.scale(
+            scale: _scaleAnimation.value,
+            child: Container(
+              width: widget.width ?? double.infinity,
+              height: widget.height,
+              decoration: BoxDecoration(
+                gradient: widget.gradient ?? AppGradients.primary,
+                borderRadius: BorderRadius.circular(widget.borderRadius),
+                boxShadow: isDisabled
+                    ? null
+                    : [
+                        BoxShadow(
+                          color: (widget.gradient != null
+                                  ? AppColors.secondary
+                                  : AppColors.primary)
+                              .withValues(alpha: 0.25 * _elevationAnimation.value),
+                          blurRadius: 20 * _elevationAnimation.value,
+                          offset: Offset(0, 8 * _elevationAnimation.value),
+                          spreadRadius: 0,
+                        ),
+                      ],
               ),
-            ],
+              child: child,
+            ),
           ),
-          child: child,
-        ),
-      ),
-      child: GestureDetector(
-        onTapDown: (_) => _controller.forward(),
-        onTapUp: (_) {
-          _controller.reverse();
-          HapticFeedback.lightImpact();
-          widget.onPressed();
-        },
-        onTapCancel: () => _controller.reverse(),
-        child: Center(
-          child: widget.isLoading
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2.5,
-                  ),
-                )
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (widget.icon != null) ...[
-                      Icon(widget.icon, color: Colors.white, size: 20),
-                      const SizedBox(width: 8),
-                    ],
-                    Text(widget.text, style: AppTextStyles.button),
-                  ],
-                ),
+          child: GestureDetector(
+            onTapDown: (_) => _controller.forward(),
+            onTapUp: (_) {
+              _controller.reverse();
+              HapticFeedback.lightImpact();
+              widget.onPressed?.call();
+            },
+            onTapCancel: () => _controller.reverse(),
+            child: Center(
+              child: widget.isLoading
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                      ),
+                    )
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.icon != null) ...[
+                          Icon(widget.icon, color: widget.textColor ?? Colors.white, size: 20),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(
+                          widget.text,
+                          style: AppTextStyles.button.copyWith(color: widget.textColor ?? Colors.white),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
         ),
       ),
     );

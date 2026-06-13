@@ -10,6 +10,7 @@ import '../../../../models/app_models.dart';
 import 'create_course_screen.dart';
 import 'video_upload_screen.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../../../screens/course_detail/course_detail_screen_v2.dart';
 
 class TrainerCoursesScreen extends StatefulWidget {
   const TrainerCoursesScreen({super.key});
@@ -226,56 +227,70 @@ class _TrainerCoursesScreenState extends State<TrainerCoursesScreen> {
                           ),
                           child: Column(
                             children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 70, height: 70,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(AppRadius.md),
-                                      image: c.thumbnailUrl.isNotEmpty
-                                          ? DecorationImage(
-                                              image: bunnyStorageNetworkImage(c.thumbnailUrl),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : null,
+                              TapScale(
+                                onTap: () {
+                                  HapticFeedback.mediumImpact();
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => CourseDetailScreenV2(
+                                        course: c,
+                                        isTrainerPreview: true,
+                                      ),
                                     ),
-                                    child: c.thumbnailUrl.isNotEmpty
-                                        ? null
-                                        : Center(child: Text(c.emoji, style: const TextStyle(fontSize: 32))),
-                                  ),
-                                  const SizedBox(width: AppSpacing.lg),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          c.title,
-                                          style: AppTextStyles.titleMedium,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          children: [
-                                            StatusBadge(status: c.isApproved ? BadgeStatus.approved : BadgeStatus.pending),
-                                            const SizedBox(width: 12),
-                                            Icon(Icons.people_alt_rounded, size: 14, color: AppColors.textHint),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                c.category.isEmpty ? 'Uncategorized' : c.category,
-                                                style: AppTextStyles.labelSmall,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                  );
+                                },
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 70, height: 70,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(AppRadius.md),
+                                        image: c.thumbnailUrl.isNotEmpty
+                                            ? DecorationImage(
+                                                image: bunnyStorageNetworkImage(c.thumbnailUrl),
+                                                fit: BoxFit.cover,
+                                              )
+                                            : null,
+                                      ),
+                                      child: c.thumbnailUrl.isNotEmpty
+                                          ? null
+                                          : Center(child: Text(c.emoji, style: const TextStyle(fontSize: 32))),
+                                    ),
+                                    const SizedBox(width: AppSpacing.lg),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            c.title,
+                                            style: AppTextStyles.titleMedium,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            children: [
+                                              StatusBadge(status: c.isApproved ? BadgeStatus.approved : BadgeStatus.pending),
+                                              const SizedBox(width: 12),
+                                              Icon(Icons.people_alt_rounded, size: 14, color: AppColors.textHint),
+                                              const SizedBox(width: 4),
+                                              Expanded(
+                                                child: Text(
+                                                  c.category.isEmpty ? 'Uncategorized' : c.category,
+                                                  style: AppTextStyles.labelSmall,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
                                               ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                               const SizedBox(height: AppSpacing.lg),
                               Divider(height: 1, color: AppColors.divider),
